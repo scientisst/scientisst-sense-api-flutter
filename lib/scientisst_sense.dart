@@ -4,15 +4,21 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 
+part 'frame.dart';
+
+// Bluetooth timeout
 const TIMEOUT_IN_SECONDS = 3;
 
+// CRC4 check function
+const CRC4TAB = [0, 3, 6, 5, 12, 15, 10, 9, 11, 8, 13, 14, 7, 4, 1, 2];
+
+// ScientISST Sense API modes
 enum ApiMode {
-  BITALINO,
+  BITALINO, // not implemented yet
   SCIENTISST,
-  JSON,
+  JSON, // not implemented yet
 }
 
 int _parseAPI(ApiMode api) {
@@ -25,28 +31,33 @@ int _parseAPI(ApiMode api) {
 }
 
 // CHANNELS
+// 12 bits
 const AI1 = 1;
 const AI2 = 2;
 const AI3 = 3;
 const AI4 = 4;
 const AI5 = 5;
 const AI6 = 6;
+// 24 bits
 const AX1 = 7;
 const AX2 = 8;
 
+// TODO: comments and exceptions!
 class Sense {
   int _numChs = 0;
-  int _sampleRate;
+  int _sampleRate = 0;
   final List _chs = [null, null, null, null, null, null, null, null];
   final String address;
   BluetoothConnection _connection;
   final List<int> _buffer = [];
-  bool _connected = false;
+  bool connected = false;
+  bool acquiring = false;
   ApiMode _apiMode = ApiMode.BITALINO;
   int _packetSize;
 
   Sense(this.address);
 
+  /// Searches for Bluetooth devices in range
   static Future<List<String>> find() async {
     final List<BluetoothDevice> devices =
         await FlutterBluetoothSerial.instance.getBondedDevices();
@@ -60,19 +71,20 @@ class Sense {
   Future<void> connect() async {
     _connection = await BluetoothConnection.toAddress(address);
     _connection.input.listen((Uint8List data) {
-      debugPrint('Data incoming: $data');
+      //debugPrint('Data incoming: $data');
       _buffer.addAll(data);
     }).onDone(() {
       disconnect();
       print('Disconnected by remote request');
     });
-    _connected = true;
+    connected = true;
     print("ScientISST Sense: CONNECTED");
   }
 
   Future<void> disconnect() async {
-    if (_connected) {
-      _connected = false;
+    if (connected) {
+      acquiring = false;
+      connected = false;
       if (_connection != null) {
         await _connection.close();
         _connection?.dispose();
@@ -169,10 +181,143 @@ class Sense {
 
     await _send(cmd);
 
-    _packetSize = _getPacketSize();
+    _packetSize = await _getPacketSize();
+    acquiring = true;
+  }
+
+  Future<List<Frame>> read(int numFrames) async {
+    //final bf = List.filled(_packetSize, null);
+    final List<Frame> frames = List.filled(numFrames, null, growable: false);
+
+    if (_numChs == 0) return null;
+
+    bool midFrameFlag;
+    List<int> bf;
+    Frame f;
+    for (int it = 0; it < numFrames; it++) {
+      midFrameFlag = false;
+      bf = await _recv(_packetSize);
+      if (bf == null) return null;
+
+      while (!_checkCRC4(bf, _packetSize)) {
+        bf.replaceRange(0, _packetSize - 1, bf.sublist(1));
+        bf.last = null;
+
+        final result = await _recv(1);
+        bf[_packetSize - 1] = result.first;
+
+        if (bf.last == null)
+          return List<Frame>.from(frames.where((Frame frame) => frame != null));
+      }
+
+      f = Frame();
+      frames[it] = f;
+
+      if (_apiMode == ApiMode.SCIENTISST) {
+        f.seq = bf.last >> 4;
+        for (int i = 0; i < 4; i++) {
+          f.digital[i] = ((bf[_packetSize - 2] & (0x80 >> i)) != 0);
+        }
+
+        // Get channel values
+        int currCh;
+        int j = 0;
+        for (int i = 0; i < _numChs; i++) {
+          currCh = _chs[_numChs - 1 - i];
+          if (currCh == AX1 || currCh == AX2) {
+            f.a[currCh - 1] = _uint8List2int(bf.sublist(j, j + 4)) & 0xFFFFFF;
+            j += 3;
+          } else {
+            if (!midFrameFlag) {
+              f.a[currCh - 1] = _uint8List2int(bf.sublist(j, j + 2)) & 0xFFF;
+              j += 1;
+              midFrameFlag = true;
+            } else {
+              f.a[currCh - 1] = _uint8List2int(bf.sublist(j, j + 2)) >> 4;
+              j += 2;
+              midFrameFlag = false;
+            }
+          }
+        }
+      }
+    }
+    return frames;
+  }
+
+  Future<void> stop() async {
+    if (_numChs == 0) {
+      return;
+    }
+
+    final cmd = 0x00;
+    await _send(cmd);
+
+    _numChs = 0;
+    _sampleRate = 0;
+    acquiring = false;
+
+    _clear();
+  }
+
+  Future<void> battery({int value = 0}) async {
+    // TODO
+  }
+
+  Future<void> trigger(List<int> digitalOutput) async {
+    // TODO
+  }
+
+  Future<void> dac(List<int> pwmOutput) async {
+    // TODO
+  }
+
+  state() async {
+    // TODO
   }
 
   ////////////////// PRIVATE ///////////////////////
+
+  bool _checkCRC4(List<int> data, int length) {
+    int crc = 0;
+    int b;
+    for (int i = 0; i < length - 1; i++) {
+      b = data[i];
+      crc = CRC4TAB[crc] ^ (b >> 4);
+      crc = CRC4TAB[crc] ^ (b & 0x0F);
+    }
+
+    crc = CRC4TAB[crc] ^ (data.last >> 4);
+    crc = CRC4TAB[crc];
+    return crc == (data.last & 0x0F);
+  }
+
+  Future<int> _getPacketSize() async {
+    int packetSize = 0;
+
+    if (_apiMode == ApiMode.SCIENTISST) {
+      int numInternActiveChs = 0;
+      int numExternActiveChs = 0;
+
+      for (int ch in _chs) {
+        if (ch != null) {
+          if (ch == 6 || ch == 7) {
+            numExternActiveChs++;
+          } else {
+            numInternActiveChs++;
+          }
+        }
+      }
+      packetSize = 3 * numExternActiveChs;
+
+      if (numInternActiveChs % 2 == 0) {
+        packetSize += (numInternActiveChs * 12) ~/ 8;
+      } else {
+        packetSize += ((numInternActiveChs * 12) - 4) ~/ 8;
+      }
+      packetSize += 2;
+    }
+    return packetSize;
+  }
 
   Future<void> _changeAPI(ApiMode api) async {
     if (_numChs != 0) return;
@@ -185,15 +330,29 @@ class Sense {
     await _send(_api);
   }
 
-  int _getPacketSize() {
-    return 0;
-  }
-
   void _clear() {
     _buffer.clear();
   }
 
+  int _uint8List2int(var list, {String byteOrder = "little"}) {
+    assert(byteOrder == "little" || byteOrder == "big");
+
+    int result = 0;
+    if (byteOrder == "little") {
+      for (int i = 0; i < list.length; i++) {
+        result += list[i] << (8 * i);
+      }
+    } else {
+      for (int i = 0; i < list.length; i++) {
+        result += list[list.length - 1 - i] << (8 * i);
+      }
+    }
+    return result;
+  }
+
   Uint8List _int2Uint8List(int value) {
+    if (value == 0) return Uint8List.fromList([0]);
+
     final nrOfBytes = ((log(value) / log(2)) ~/ 8 + 1).floor();
     final Uint8List result = Uint8List(nrOfBytes);
     for (int i = 0; i < nrOfBytes; i++) {

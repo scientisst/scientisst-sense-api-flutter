@@ -1,5 +1,9 @@
+import 'package:example/chart.dart';
 import 'package:flutter/material.dart';
 import 'package:scientisst_sense/scientisst_sense.dart';
+
+const WINDOW_IN_SECONDS = 10;
+const FS = 1000;
 
 void main() {
   runApp(MyApp());
@@ -22,32 +26,66 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  List<SensorValue> data;
+  Sense sense;
+  int c = 0;
+
   @override
   void initState() {
     super.initState();
+    data =
+        List.generate(WINDOW_IN_SECONDS * FS, (index) => SensorValue(index, 0));
+    connect().then((_) => start());
   }
 
-  test() async {
+  connect() async {
     final devices = await Sense.find();
     if (devices.isNotEmpty) {
-      final sense = Sense(devices.first);
+      sense = Sense(devices.first);
       await sense.connect();
       await sense.version();
-      await Future.delayed(Duration(seconds: 1));
-      await sense.start(
-        5000,
-        [AI3],
-      );
-      await Future.delayed(Duration(seconds: 5));
-      await sense.disconnect();
+    }
+  }
+
+  start() async {
+    await sense.start(
+      FS,
+      [AI3],
+    );
+    int numFrames = FS ~/ 5;
+    List<Frame> frames;
+    while (true) {
+      frames = await sense.read(numFrames);
+      setState(() {
+        for (int i = 0; i < frames.length; i++) {
+          data[c] = SensorValue(c, frames[i].a[2]);
+          c++;
+          if (c >= data.length) {
+            c = 0;
+          }
+        }
+      });
     }
   }
 
   @override
+  void dispose() async {
+    await sense.stop();
+    await sense.disconnect();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    test();
     return Scaffold(
-      body: Container(),
+      body: Center(
+        child: Container(
+          height: 500,
+          child: ChartWidget(
+            data,
+          ),
+        ),
+      ),
     );
   }
 }
