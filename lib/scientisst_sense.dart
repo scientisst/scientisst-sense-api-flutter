@@ -232,20 +232,23 @@ class Sense {
 
         // Get channel values
         int currCh;
-        int j = 0;
+        int byteIt = 0;
         for (int i = 0; i < _numChs; i++) {
           currCh = _chs[_numChs - 1 - i];
           if (currCh == AX1 || currCh == AX2) {
-            f.a[currCh - 1] = _uint8List2int(bf.sublist(j, j + 4)) & 0xFFFFFF;
-            j += 3;
+            f.a[currCh - 1] =
+                _uint8List2int(bf.sublist(byteIt, byteIt + 4)) & 0xFFFFFF;
+            byteIt += 3;
           } else {
             if (!midFrameFlag) {
-              f.a[currCh - 1] = _uint8List2int(bf.sublist(j, j + 2)) & 0xFFF;
-              j += 1;
+              f.a[currCh - 1] =
+                  _uint8List2int(bf.sublist(byteIt, byteIt + 2)) & 0xFFF;
+              byteIt += 1;
               midFrameFlag = true;
             } else {
-              f.a[currCh - 1] = _uint8List2int(bf.sublist(j, j + 2)) >> 4;
-              j += 2;
+              f.a[currCh - 1] =
+                  _uint8List2int(bf.sublist(byteIt, byteIt + 2)) >> 4;
+              byteIt += 2;
               midFrameFlag = false;
             }
           }
@@ -332,13 +335,15 @@ class Sense {
 
       for (int ch in _chs) {
         if (ch != null) {
-          if (ch == 6 || ch == 7) {
+          // Add 24bit channel's contributuion to packet size
+          if (ch == AX1 || ch == AX1) {
             numExternActiveChs++;
           } else {
             numInternActiveChs++;
           }
         }
       }
+      //Add 24bit channel's contributuion to packet size
       packetSize = 3 * numExternActiveChs;
 
       if (numInternActiveChs % 2 == 0) {
