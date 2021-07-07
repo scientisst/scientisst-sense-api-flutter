@@ -203,7 +203,7 @@ class Sense {
   /// sample_rate : [int]
   ///   Sampling rate in Hz. Accepted values are 1, 10, 100 or 1000 Hz.
   /// channels : [List<int>]
-  ///   Set of channels to acquire. Accepted channels are 0...5 for inputs A1...A6.
+  ///   Set of channels to acquire. Accepted channels are 1...6 for inputs A1...A6.
   /// file_name : [String]
   ///   Name of the file where the live mode data will be written into.
   /// simulated : [bool]
@@ -244,7 +244,7 @@ class Sense {
     } else {
       chMask = 0;
       for (int ch in channels) {
-        if (ch < 0 || ch > 8)
+        if (ch <= 0 || ch > 8)
           throw SenseException(SenseErrorType.INVALID_PARAMETER);
 
         // fill chs vector
@@ -360,6 +360,8 @@ class Sense {
             }
           }
         }
+      } else if (_apiMode == ApiMode.JSON) {
+        //
       } else {
         SenseException(SenseErrorType.NOT_SUPPORTED);
       }
