@@ -1,17 +1,17 @@
 name: scientisst_sense
-description: A new Flutter package project.
+description: ScientISST Sense Flutter API
 version: 0.0.1
-author:
-homepage:
+author: ScientISST
+homepage: https://scientisst.com
 
 environment:
-  sdk: ">=2.7.0 <3.0.0"
+  sdk: '>=2.12.0 <3.0.0'
   flutter: ">=1.17.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  flutter_bluetooth_serial: ^0.2.2
+  flutter_bluetooth_serial: ^0.3.0
 
 dev_dependencies:
   flutter_test:

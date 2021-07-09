@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:scientisst_sense/scientisst_sense.dart';
 
 const WINDOW_IN_SECONDS = 10;
-const FS = 1000;
+const FS = 10;
 
 void main() {
   runApp(MyApp());
@@ -40,6 +40,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   connect() async {
     final devices = await Sense.find();
+    print(devices);
     if (devices.isNotEmpty) {
       sense = Sense(devices.first);
       await sense.connect();
@@ -48,13 +49,14 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   start() async {
-    await sense.start(
+    await sense?.start(
       FS,
       [AI3],
+      api: ApiMode.JSON,
     );
     int numFrames = FS ~/ 5;
     List<Frame> frames;
-    while (true) {
+    while (false) {
       frames = await sense.read(numFrames);
       setState(() {
         for (int i = 0; i < frames.length; i++) {

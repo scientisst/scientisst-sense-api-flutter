@@ -12,8 +12,8 @@ enum SenseErrorType {
 }
 
 class SenseException implements Exception {
-  String msg;
-  final SenseErrorType type;
+  String? msg;
+  final SenseErrorType? type;
 
   SenseException([this.type, this.msg]) {
     switch (type) {

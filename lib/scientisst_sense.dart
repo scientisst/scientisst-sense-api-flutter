@@ -17,9 +17,9 @@ const CRC4TAB = [0, 3, 6, 5, 12, 15, 10, 9, 11, 8, 13, 14, 7, 4, 1, 2];
 
 // ScientISST Sense API modes
 enum ApiMode {
-  BITALINO, // not implemented yet
+  BITALINO, // TODO: not implemented yet
   SCIENTISST,
-  JSON, // not implemented yet
+  JSON, // TODO: not implemented yet
 }
 
 int _parseAPI(ApiMode api) {
@@ -48,12 +48,12 @@ class Sense {
   int _sampleRate = 0;
   final List _chs = [null, null, null, null, null, null, null, null];
   final String address;
-  BluetoothConnection _connection;
+  BluetoothConnection? _connection;
   final List<int> _buffer = [];
   bool connected = false;
   bool acquiring = false;
   ApiMode _apiMode = ApiMode.BITALINO;
-  int _packetSize;
+  int _packetSize = 0;
 
   /// ScientISST Device class
   ///
@@ -88,8 +88,9 @@ class Sense {
         await FlutterBluetoothSerial.instance.getBondedDevices();
     return devices
         .where((device) =>
-            device.isBonded && device.name.toLowerCase().contains("scientisst"))
-        .map((device) => device.address)
+            device.isBonded &&
+            device.name!.toLowerCase().contains("scientisst"))
+        .map((device) => device.address!)
         .toList();
   }
 
@@ -106,16 +107,19 @@ class Sense {
   /// Exceptions
   /// ----------
   /// [DEVICE_NOT_FOUND] : if the device was not found or the connection was not established
-  Future<void> connect() async {
+  Future<void> connect({Function()? onDisconnect}) async {
     _connection = await BluetoothConnection.toAddress(address)
         .timeout(Duration(seconds: TIMEOUT_IN_SECONDS))
         .catchError(
             (_) => throw SenseException(SenseErrorType.DEVICE_NOT_FOUND));
-    _connection.input.listen((Uint8List data) {
+    if (_connection == null)
+      throw SenseException(SenseErrorType.CONTACTING_DEVICE_ERROR);
+    _connection!.input!.listen((Uint8List data) {
       // add all incoming data to local buffer
       _buffer.addAll(data);
-    }).onDone(() {
-      disconnect();
+    }).onDone(() async {
+      await disconnect();
+      if (onDisconnect != null) onDisconnect();
       print('Disconnected by remote request');
     });
     connected = true;
@@ -139,7 +143,7 @@ class Sense {
       }
       connected = false;
       if (_connection != null) {
-        await _connection.close();
+        await _connection!.close();
         _connection?.dispose();
         _connection = null;
       }
@@ -169,26 +173,22 @@ class Sense {
     String version = "";
     while (true) {
       final result = await _recv(1);
-      if (result != null) {
-        if (version.length >= headerLen) {
-          if (result.first == 0x00) {
-            break;
-          } else if (result != utf8.encode("\n")) {
-            version += utf8.decode(result);
-          }
-        } else {
-          final char = utf8.decode(result);
-          if (char == header[version.length]) {
-            version += char;
-          } else {
-            version = "";
-            if (char == header[0]) {
-              version += char;
-            }
-          }
+      if (version.length >= headerLen) {
+        if (result.first == 0x00) {
+          break;
+        } else if (result != utf8.encode("\n")) {
+          version += utf8.decode(result);
         }
       } else {
-        return null;
+        final char = utf8.decode(result);
+        if (char == header[version.length]) {
+          version += char;
+        } else {
+          version = "";
+          if (char == header[0]) {
+            version += char;
+          }
+        }
       }
     }
 
@@ -294,35 +294,33 @@ class Sense {
   /// [DEVICE_NOT_IN_ACQUISITION] : if the device is not in acquisition mode.
   /// [NOT_SUPPORTED] : if the device API is in BITALINO mode
   /// [UNKNOWN_ERROR] : if the device stopped sending frames for some unknown reason.
-  Future<List<Frame>> read(int numFrames) async {
+  Future<List<Frame?>> read(int numFrames) async {
     //final bf = List.filled(_packetSize, null);
-    final List<Frame> frames = List.filled(numFrames, null, growable: false);
+    final List<Frame?> frames = List.filled(numFrames, null, growable: false);
 
     if (_numChs == 0)
       throw SenseException(SenseErrorType.DEVICE_NOT_IN_ACQUISITION);
 
     bool midFrameFlag;
-    List<int> bf;
+    List<int>? bf;
     Frame f;
     for (int it = 0; it < numFrames; it++) {
       midFrameFlag = false;
       bf = await _recv(_packetSize);
-      if (bf == null)
-        throw SenseException(SenseErrorType.UNKNOWN_ERROR,
-            "Esp stopped sending frames -> It stopped live mode on its own \n(probably because it can't handle this number of channels + sample rate)");
 
       // if CRC check failed, try to resynchronize with the next valid frame
       while (!_checkCRC4(bf, _packetSize)) {
         bf.replaceRange(0, _packetSize - 1, bf.sublist(1));
-        bf.last = null;
+        bf.last = -1;
 
         //  checking with one new byte at a time
         final result = await _recv(1);
         bf[_packetSize - 1] = result.first;
 
-        if (bf.last == null)
+        if (bf.last == -1)
           // a timeout has occurred
-          return List<Frame>.from(frames.where((Frame frame) => frame != null));
+          return List<Frame>.from(
+              frames.where((Frame? frame) => frame != null));
       }
 
       f = Frame();
@@ -500,19 +498,19 @@ class Sense {
 
   ////////////////// PRIVATE ///////////////////////
 
-  bool _checkCRC4(List<int> data, int length) {
+  bool _checkCRC4(List<int?> data, int length) {
     int crc = 0;
-    int b;
+    int? b;
     for (int i = 0; i < length - 1; i++) {
       b = data[i];
-      crc = CRC4TAB[crc] ^ (b >> 4);
+      crc = CRC4TAB[crc] ^ (b! >> 4);
       crc = CRC4TAB[crc] ^ (b & 0x0F);
     }
 
     // CRC for last byte
-    crc = CRC4TAB[crc] ^ (data.last >> 4);
+    crc = CRC4TAB[crc] ^ (data.last! >> 4);
     crc = CRC4TAB[crc];
-    return crc == (data.last & 0x0F);
+    return crc == (data.last! & 0x0F);
   }
 
   Future<int> _getPacketSize() async {
@@ -522,7 +520,7 @@ class Sense {
       int numInternActiveChs = 0;
       int numExternActiveChs = 0;
 
-      for (int ch in _chs) {
+      for (int? ch in _chs as Iterable<int?>) {
         if (ch != null) {
           // Add 24bit channel's contributuion to packet size
           if (ch == AX1 || ch == AX1) {
@@ -573,7 +571,7 @@ class Sense {
   }
 
   /// Convert [Uint8List] to 32bit [int]
-  int _uint8List2int(var list, {String byteOrder = "little"}) {
+  int _uint8List2int(List<int> list, {String byteOrder = "little"}) {
     assert(byteOrder == "little" || byteOrder == "big");
     int result = 0;
     if (byteOrder == "little") {
@@ -604,8 +602,8 @@ class Sense {
   Future<void> _send(int cmd) async {
     final Uint8List _cmd = _int2Uint8List(cmd);
     //print(_cmd.map((int) => int.toRadixString(16).padLeft(2, "0")).toList());
-    _connection.output.add(_cmd);
-    await _connection.output.allSent
+    _connection!.output.add(_cmd);
+    await _connection!.output.allSent
         .timeout(Duration(seconds: TIMEOUT_IN_SECONDS))
         .catchError((_) =>
             throw SenseException(SenseErrorType.CONTACTING_DEVICE_ERROR));
@@ -613,6 +611,7 @@ class Sense {
 
   /// Receive data
   Future<List<int>> _recv(int nrOfBytes) async {
+    assert(nrOfBytes > 0);
     List<int> data;
     int timeout = TIMEOUT_IN_SECONDS * 1000 ~/ 150;
     while (timeout > 0 && _buffer.length < nrOfBytes) {
