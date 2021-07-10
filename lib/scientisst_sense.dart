@@ -108,22 +108,32 @@ class Sense {
   /// ----------
   /// [DEVICE_NOT_FOUND] : if the device was not found or the connection was not established
   Future<void> connect({Function()? onDisconnect}) async {
-    _connection = await BluetoothConnection.toAddress(address)
-        .timeout(Duration(seconds: TIMEOUT_IN_SECONDS))
-        .catchError(
-            (_) => throw SenseException(SenseErrorType.DEVICE_NOT_FOUND));
-    if (_connection == null)
-      throw SenseException(SenseErrorType.CONTACTING_DEVICE_ERROR);
-    _connection!.input!.listen((Uint8List data) {
-      // add all incoming data to local buffer
-      _buffer.addAll(data);
-    }).onDone(() async {
-      await disconnect();
-      if (onDisconnect != null) onDisconnect();
-      print('Disconnected by remote request');
-    });
-    connected = true;
-    print("ScientISST Sense: CONNECTED");
+    // check if it's already paired or (if it's not paired) if pairing was successful
+    final paired =
+        (await FlutterBluetoothSerial.instance.getBondStateForAddress(address))
+                .isBonded ||
+            ((await FlutterBluetoothSerial.instance
+                    .bondDeviceAtAddress(address, passkeyConfirm: true)) ??
+                false);
+
+    if (paired) {
+      _connection = await BluetoothConnection.toAddress(address)
+          .timeout(Duration(seconds: TIMEOUT_IN_SECONDS))
+          .catchError(
+              (_) => throw SenseException(SenseErrorType.DEVICE_NOT_FOUND));
+      if (_connection == null)
+        throw SenseException(SenseErrorType.CONTACTING_DEVICE_ERROR);
+      _connection!.input!.listen((Uint8List data) {
+        // add all incoming data to local buffer
+        _buffer.addAll(data);
+      }).onDone(() async {
+        await disconnect();
+        if (onDisconnect != null) onDisconnect();
+        print('Disconnected by remote request');
+      });
+      connected = true;
+      print("ScientISST Sense: CONNECTED");
+    }
   }
 
   /// Disconnects from a ScientISST device. If an aquisition is running, it is stopped
