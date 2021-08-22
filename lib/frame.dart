@@ -5,4 +5,8 @@ class Frame {
   int? seq;
   final List<int?> a = List.filled(8, null, growable: false);
   final List<bool> digital = List.filled(4, false, growable: false);
+
+  String toString() {
+    return {"seq": seq, "digital": digital, "a": a}.toString();
+  }
 }

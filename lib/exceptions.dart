@@ -24,7 +24,7 @@ class SenseException implements Exception {
         msg = "The device could not be found.";
         return;
       case SenseErrorType.CONTACTING_DEVICE_ERROR:
-        msg = "Lsot communication with the device.";
+        msg = "Lost communication with the device.";
         return;
       case SenseErrorType.DEVICE_NOT_IDLE:
         msg = "The device is not idle.";
