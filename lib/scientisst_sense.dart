@@ -384,9 +384,18 @@ class Sense {
 
   Stream<List<Frame>> stream({int? numFrames}) async* {
     final _numFrames = numFrames ?? _sampleRate ~/ 5;
-    while (connected && acquiring) {
-      final frames = await read(_numFrames);
-      yield frames;
+    try {
+      while (connected && acquiring) {
+        final frames = await read(_numFrames);
+        yield frames;
+      }
+    } on SenseException catch (e) {
+      if (e.type == SenseErrorType.CONTACTING_DEVICE_ERROR) {
+        disconnect();
+        return;
+      } else {
+        rethrow;
+      }
     }
   }
 
