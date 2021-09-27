@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 
 part 'frame.dart';
@@ -644,7 +645,7 @@ class Sense {
   /// Send data
   Future<void> _send(int cmd, [int? nrOfBytes]) async {
     final Uint8List _cmd = _int2Uint8List(cmd, nrOfBytes);
-    print(_cmd.map((int) => int.toRadixString(16).padLeft(2, "0")).toList());
+    //debugPrint("${_cmd.map((int) => int.toRadixString(16).padLeft(2, "0")).toList()}");
     _connection!.output.add(_cmd);
     await _connection!.output.allSent
         .timeout(Duration(seconds: TIMEOUT_IN_SECONDS))
@@ -667,7 +668,7 @@ class Sense {
     } else {
       throw SenseException(SenseErrorType.CONTACTING_DEVICE_ERROR);
     }
-    //print(data);
+    //debugPrint("$data");
     return data;
   }
 }
