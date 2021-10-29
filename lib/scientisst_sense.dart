@@ -69,12 +69,19 @@ class Sense {
   /// Exceptions
   /// ----------
   /// [INVALID_ADDRESS] : if the address is not valid
-  Sense(this.address) {
+  Sense(this.address, {ApiMode api = ApiMode.SCIENTISST}) {
     // verify given address
     final re = RegExp(
         r'^(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}|(?:[0-9a-fA-F]{2}-){5}[0-9a-fA-F]{2}|(?:[0-9a-fA-F]{2}){5}[0-9a-fA-F]{2}$');
     if (!re.hasMatch(address))
       throw SenseException(SenseErrorType.INVALID_ADDRESS);
+
+    if (api != ApiMode.SCIENTISST &&
+        api != ApiMode.JSON &&
+        api != ApiMode.BITALINO)
+      throw SenseException(SenseErrorType.INVALID_PARAMETER);
+
+    this._apiMode = api;
   }
 
   /// Searches for Bluetooth devices in range
@@ -136,6 +143,9 @@ class Sense {
         print('Disconnected by remote request');
       });
       print("ScientISST Sense: CONNECTED");
+
+      // Set API mode
+      await _changeAPI(this._apiMode);
     }
   }
 
@@ -230,17 +240,14 @@ class Sense {
   /// [DEVICE_NOT_IDLE] : if the device is already in acquisition mode.
   /// [INVALID_PARAMETER] : if no valid API value is chosen or an incorrect array of channels is provided.
   Future<void> start(int sampleRate, List<int> channels,
-      {bool simulated = false, ApiMode api = ApiMode.SCIENTISST}) async {
+      {bool simulated = false}) async {
     if (_numChs != 0) throw SenseException(SenseErrorType.DEVICE_NOT_IDLE);
-
-    if (api != ApiMode.SCIENTISST && api != ApiMode.JSON)
-      throw SenseException(SenseErrorType.INVALID_PARAMETER);
 
     _sampleRate = sampleRate;
     _numChs = 0;
 
-    // Change API mode
-    await _changeAPI(api);
+    // Set API mode
+    await _changeAPI(this._apiMode);
 
     // Sample rate
     int sr = int.parse("01000011", radix: 2);
@@ -602,7 +609,6 @@ class Sense {
     if (_api <= 0 || _api > 3)
       throw SenseException(SenseErrorType.INVALID_PARAMETER);
 
-    _apiMode = api;
     _api <<= 4;
     _api |= int.parse("11", radix: 2);
 
