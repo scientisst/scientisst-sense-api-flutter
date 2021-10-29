@@ -298,7 +298,7 @@ class Sense {
   ///
   /// Parameters
   /// ----------
-  /// num_frames : [int]
+  /// numFrames : [int]
   /// Number of frames to retrieve from the device
   ///
   /// Returns
@@ -391,7 +391,7 @@ class Sense {
   }
 
   Stream<List<Frame>> stream({int? numFrames}) async* {
-    final _numFrames = numFrames ?? _sampleRate ~/ 5;
+    final _numFrames = numFrames ?? (_sampleRate ~/ 5);
     try {
       while (connected && acquiring) {
         final frames = await read(_numFrames);
