@@ -342,9 +342,7 @@ class Sense {
               frames.where((Frame? frame) => frame != null));
       }
 
-      f = Frame();
-      frames[it] = f;
-
+      f = Frame(_numChs);
       if (_apiMode == ApiMode.SCIENTISST) {
         // Get seq number and IO states
         f.seq = bf.last >> 4;
@@ -355,23 +353,24 @@ class Sense {
         // Get channel values
         int currCh;
         int byteIt = 0;
+        int index = 0;
         for (int i = 0; i < _numChs; i++) {
-          currCh = _chs[_numChs - 1 - i]!;
+          index = _numChs - 1 - i;
+          currCh = _chs[index]!;
           // If it's an AX channel
           if (currCh == AX1 || currCh == AX2) {
-            f.a[currCh - 1] =
+            f.a[index] =
                 _uint8List2int(bf.sublist(byteIt, byteIt + 4)) & 0xFFFFFF;
             byteIt += 3;
             // If it's an AI channel
           } else {
             if (!midFrameFlag) {
-              f.a[currCh - 1] =
+              f.a[index] =
                   _uint8List2int(bf.sublist(byteIt, byteIt + 2)) & 0xFFF;
               byteIt += 1;
               midFrameFlag = true;
             } else {
-              f.a[currCh - 1] =
-                  _uint8List2int(bf.sublist(byteIt, byteIt + 2)) >> 4;
+              f.a[index] = _uint8List2int(bf.sublist(byteIt, byteIt + 2)) >> 4;
               byteIt += 2;
               midFrameFlag = false;
             }
@@ -379,9 +378,12 @@ class Sense {
         }
       } else if (_apiMode == ApiMode.JSON) {
         //
+        f = Frame(_numChs);
       } else {
-        SenseException(SenseErrorType.NOT_SUPPORTED);
+        throw SenseException(SenseErrorType.NOT_SUPPORTED);
       }
+
+      frames[it] = f;
     }
     return List<Frame>.from(
       frames.where(

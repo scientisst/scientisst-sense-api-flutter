@@ -35,24 +35,24 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
     data =
         List.generate(WINDOW_IN_SECONDS * FS, (index) => SensorValue(index, 0));
-    connect().then((_) => start());
+    connect(); //.then((_) => start());
   }
 
   connect() async {
-    final devices = await Sense.find();
-    print(devices);
-    if (devices.isNotEmpty) {
-      sense = Sense(devices.first);
-      await sense.connect();
-      await sense.version();
-    }
+    //final devices = await Sense.find();
+    //print(devices);
+    final address = "08:3A:F2:49:AB:DE";
+    //if (devices.isNotEmpty) {
+    sense = Sense(address);
+    await sense.connect();
+    await sense.version();
+    //}
   }
 
   start() async {
     await sense?.start(
       FS,
       [AI3],
-      api: ApiMode.JSON,
     );
     int numFrames = FS ~/ 5;
     List<Frame> frames;
